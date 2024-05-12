@@ -1,0 +1,9 @@
+*.exe
+*.obj
+*.res
+*.pdb
+
+# models
+*.fbx
+*.dae
+*.glb
