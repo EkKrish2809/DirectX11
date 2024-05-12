@@ -2,6 +2,7 @@
 *.obj
 *.res
 *.pdb
+*.pch
 
 # models
 *.fbx
