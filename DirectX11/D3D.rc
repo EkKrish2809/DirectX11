@@ -1,0 +1,5 @@
+#include "D3D.h"
+
+MYICON ICON K_new2.ico
+GRASS1_DDS_TEXTURE RCDATA "D:\\RTR5.0\\DirectX_Revision\\Grass\\01-Grass\\Textures\\grass\\grass_1.dds"
+FLOWMAP_DDS_TEXTURE RCDATA "assets/Textures/grass/flowmap.dds"
