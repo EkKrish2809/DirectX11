@@ -1,0 +1,3 @@
+#include "D3D.h"
+
+MYICON ICON K_new2.ico
