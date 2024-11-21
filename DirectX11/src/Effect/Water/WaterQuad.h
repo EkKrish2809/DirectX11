@@ -52,6 +52,7 @@ class WaterQuad
             // XMMATRIX View;
             // XMMATRIX ProjectionMatrix;
             XMMATRIX wvpMatrix;
+            XMVECTOR color;
         };
 
         WaterQuad()
@@ -358,9 +359,23 @@ class WaterQuad
             return TRUE;
         }
 
-        void RenderObject(XMFLOAT3 camPos, XMFLOAT3 center, XMFLOAT3 up)
+        // void RenderObject(XMFLOAT3 camPos, XMFLOAT3 center, XMFLOAT3 up, bool bDispalyReflection)
+        void RenderObject(Camera camera, bool bDispalyReflection)
         {
             // code
+            // XMFLOAT3 changedCamPos;// = camPos;
+            XMVECTOR changedCamPos;// = camPos;
+            if (bDispalyReflection == true)
+            {
+                // changedCamPos[1] = changedCamPos[1] * -1.0f; // invert Y of camPos for showing reflection
+                // changedCamPos = XMFLOAT3((camPos.x), -1.0f * (camPos.y), (camPos.z));
+                changedCamPos = XMVectorSet(XMVectorGetX(camera.getEye()), -XMVectorGetY(camera.getEye()), XMVectorGetZ(camera.getEye()), 1.0f);
+            }
+            else 
+            {
+                changedCamPos = camera.getEye();
+            }
+
             m_DeviceContext->IASetInputLayout(gpID3D11InputLayout);
             // set Position Buffer into InputAssembly stage of pipeline (glVertexAttribPointer() che last 2 para)
             UINT stride = sizeof(float) * 3;
@@ -378,33 +393,87 @@ class WaterQuad
 
             // transformations
             // A. initialize matrices
-            XMMATRIX worldMatrix = XMMatrixRotationX(angle) * XMMatrixRotationY(angle) * XMMatrixRotationZ(angle) * XMMatrixScaling(0.1f, 0.1f, 0.1f) * XMMatrixTranslation(0.0f, 0.1f, 0.0f);
+            XMMATRIX worldMatrix = XMMatrixRotationX(angle) * XMMatrixRotationY(angle) * XMMatrixRotationZ(angle) * 
+                                    XMMatrixScaling(0.1f, 0.1f, 0.1f) * 
+                                    XMMatrixTranslation(0.0f, 0.2f, 0.0f);
             angle += 0.0001f;
-            XMMATRIX viewMatrix = XMMatrixLookAtLH(XMVectorSet(camPos.x, camPos.y, camPos.z, 1.0f), 
-                                       XMVectorSet(center.x, center.y, center.z, 0.0f) , 
-                                       XMVectorSet(up.x, up.y, up.z, 0.0f));
+            // XMMATRIX viewMatrix = XMMatrixLookAtLH(XMVectorSet(changedCamPos.x, changedCamPos.y, changedCamPos.z, 1.0f), 
+            //                            XMVectorSet(center.x, center.y, center.z, 0.0f) , 
+            //                            XMVectorSet(up.x, up.y, up.z, 0.0f));
 
-            XMMATRIX wvpMatrix = worldMatrix * viewMatrix * PerspectiveProjectionMatrix;
+            // PerspectiveProjectionMatrix = XMMatrixPerspectiveFovLH(XMConvertToRadians(45.0f), (float)1024 / (float)1024, 0.01f, 1000.0f);
+
+            // XMMATRIX wvpMatrix = worldMatrix * viewMatrix * PerspectiveProjectionMatrix;
+            XMMATRIX wvpMatrix = worldMatrix * camera.getViewMatrix() * PerspectiveProjectionMatrix;
 
             // B. Put them into ConstantBuffer
             CBUFFER_QUAD constBuffer;
             ZeroMemory((void *)&constBuffer, sizeof(CBUFFER_QUAD));
             constBuffer.wvpMatrix = (wvpMatrix);
+            // constBuffer.color = color;
 
             // C. Push them into the shader (like glUniformMatrix4fv())
             m_DeviceContext->UpdateSubresource(gpID3D11Buffer_ConstantBuffer, 0, NULL, &constBuffer, 0, 0);
 
             m_DeviceContext->VSSetShader(gpID3D11VertexShader, NULL, 0);
+            m_DeviceContext->PSSetShader(gpID3D11PixelShader, NULL, 0);
             m_DeviceContext->VSSetConstantBuffers(0, 1, &gpID3D11Buffer_ConstantBuffer);
             
-            m_DeviceContext->PSSetShader(gpID3D11PixelShader, NULL, 0);
-            m_DeviceContext->PSSetConstantBuffers(0, 1, &gpID3D11Buffer_ConstantBuffer);
+            // m_DeviceContext->PSSetConstantBuffers(0, 1, &gpID3D11Buffer_ConstantBuffer);
 
             // set Shader View in Pixel Shader
-            m_DeviceContext->PSSetShaderResources(0, 1, &gpID3D11ShaderResourceView_Smiley);
+            // m_DeviceContext->PSSetShaderResources(0, 1, &gpID3D11ShaderResourceView_Smiley);
 
             // Set Sampler State in Pixel Texture (corresponds to 2nd line in Pixel shader)
-            m_DeviceContext->PSSetSamplers(0, 1, &gpID3D11SamplerState_Texture);
+            // m_DeviceContext->PSSetSamplers(0, 1, &gpID3D11SamplerState_Texture);
+
+            // draw primitive
+            m_DeviceContext->Draw(36, 0);
+
+        }
+
+        void RenderCube(XMMATRIX worldMatrix, XMMATRIX viewMatrix, XMMATRIX projectionMatrix, XMVECTOR color)
+        {
+            m_DeviceContext->IASetInputLayout(gpID3D11InputLayout);
+            // set Position Buffer into InputAssembly stage of pipeline (glVertexAttribPointer() che last 2 para)
+            UINT stride = sizeof(float) * 3;
+            UINT offset = 0;
+            m_DeviceContext->IASetVertexBuffers(0, 1, &gpID3D11Buffer_PositionBuffer, &stride, &offset);
+
+            // Set color buffer into Input Assembly stage of pipeline
+            stride = sizeof(float) * 2;
+            offset = 0;
+            m_DeviceContext->IASetVertexBuffers(1, 1, &gpID3D11Buffer_TextureBuffer, &stride, &offset);
+
+            // 2. Render
+            // Set primitive topology in Input Assembly Stage
+            m_DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+            angle += 0.0001f;
+            
+            XMMATRIX wvpMatrix = worldMatrix * viewMatrix * projectionMatrix;
+
+            // B. Put them into ConstantBuffer
+            CBUFFER_QUAD constBuffer;
+            ZeroMemory((void *)&constBuffer, sizeof(CBUFFER_QUAD));
+            constBuffer.wvpMatrix = (wvpMatrix);
+            constBuffer.color = color;
+
+            // C. Push them into the shader (like glUniformMatrix4fv())
+            m_DeviceContext->UpdateSubresource(gpID3D11Buffer_ConstantBuffer, 0, NULL, &constBuffer, 0, 0);
+
+            m_DeviceContext->VSSetShader(gpID3D11VertexShader, NULL, 0);
+            m_DeviceContext->PSSetShader(gpID3D11PixelShader, NULL, 0);
+            m_DeviceContext->VSSetConstantBuffers(0, 1, &gpID3D11Buffer_ConstantBuffer);
+            m_DeviceContext->PSSetConstantBuffers(0, 1, &gpID3D11Buffer_ConstantBuffer);
+            
+            // m_DeviceContext->PSSetConstantBuffers(0, 1, &gpID3D11Buffer_ConstantBuffer);
+
+            // set Shader View in Pixel Shader
+            // m_DeviceContext->PSSetShaderResources(0, 1, &gpID3D11ShaderResourceView_Smiley);
+
+            // Set Sampler State in Pixel Texture (corresponds to 2nd line in Pixel shader)
+            // m_DeviceContext->PSSetSamplers(0, 1, &gpID3D11SamplerState_Texture);
 
             // draw primitive
             m_DeviceContext->Draw(36, 0);

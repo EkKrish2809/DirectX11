@@ -399,14 +399,12 @@ BOOL DXShaders::CreateAndCompilePixelShaderObjects(const char *shaderFilename, D
 		if (pID3DBlob_Error)
 		{
 			fprintf(gpFile, "D3DCompile() Failed for Pixel Shader :: < %s > ... 	:: %ls\n", (char *)pID3DBlob_Error->GetBufferPointer(), __FUNCTIONW__);
-        	// m_log->Logger("D3DCompile() Failed for Pixel Shader :: < %s > ... 	:: %ls\n", (char *)pID3DBlob_Error->GetBufferPointer(), __FUNCTIONW__);
 			pID3DBlob_Error->Release();
 			pID3DBlob_Error = NULL;
 		}
 		else
 		{
 			fprintf(gpFile, "D3DCompile() Failed for Pixel Shader :: < UNKNOWN > ... 	:: %ls\n", __FUNCTIONW__);
-        	// m_log->Logger("D3DCompile() Failed for Pixel Shader :: < UNKNOWN > ... 	:: %ls\n", __FUNCTIONW__);
 		}
 		fclose(gpFile);
         return (FALSE);
@@ -416,7 +414,6 @@ BOOL DXShaders::CreateAndCompilePixelShaderObjects(const char *shaderFilename, D
 		fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
 		fprintf(gpFile, "D3DCompile() Succedded for Pixel Shader... 	:: %ls\n", __FUNCTIONW__);
 		fclose(gpFile);
-        // m_log->Logger("D3DCompile() Succedded for Pixel Shader... 	:: %ls\n", __FUNCTIONW__);
 	}
 	
    // create vertex shader
@@ -429,7 +426,6 @@ BOOL DXShaders::CreateAndCompilePixelShaderObjects(const char *shaderFilename, D
 		fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
 		fprintf(gpFile, "ID3D11Device::CreatePixelShader() Failed ... 	:: %ls\n",__FUNCTIONW__);
 		fclose(gpFile);
-        // m_log->Logger("ID3D11Device::CreatePixelShader() Failed ... 	:: %ls\n",__FUNCTIONW__);
         return (FALSE);
 	}
 	else
@@ -437,7 +433,6 @@ BOOL DXShaders::CreateAndCompilePixelShaderObjects(const char *shaderFilename, D
 		fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
 		fprintf(gpFile, "ID3D11Device::CreatePixelShader() Successfull ... 	:: %ls\n", __FUNCTIONW__);
 		fclose(gpFile);
-        // m_log->Logger("ID3D11Device::CreatePixelShader() Successfull ... 	:: %ls\n", __FUNCTIONW__);
 	}
 
     return (TRUE);

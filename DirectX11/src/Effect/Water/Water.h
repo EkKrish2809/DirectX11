@@ -16,6 +16,7 @@
 #include "../Model/TextureLoader.h"
 
 #include "WaterQuad.h"
+#include "TexturedQuad.h"
 
 // #define RENDER_TEXTURE_WIDTH    1024
 // #define RENDER_TEXTURE_HEIGHT   1024
@@ -57,6 +58,7 @@ public:
     ID3D11PixelShader *gpID3D11PixelShader_WaterBedQuad = NULL;
     ID3D11InputLayout *gpID3D11InputLayout_WaterBedQuad = NULL;
     ID3D11Buffer *gpID3D11Buffer_PositionBuffer_WaterQuad = NULL;
+    ID3D11Buffer *gpID3D11Buffer_TextureBuffer_WaterQuad = NULL;
     ID3D11Buffer *gpID3D11Buffer_ConstantBuffer_WaterQuad  = NULL;
     ID3D11Buffer *gpID3D11Buffer_PositionBuffer_WaterBedQuad = NULL;
     ID3D11Buffer *gpID3D11Buffer_TextureBuffer_WaterBedQuad = NULL;
@@ -68,6 +70,8 @@ public:
     Framebuffer *fbo_reflection = NULL;
     Framebuffer *fbo_refraction = NULL;
     WaterQuad *object = NULL;
+
+    TexturedQuad *texQuad = NULL;
 
     Water() {}
 
@@ -84,7 +88,7 @@ public:
     {
         shader = new DXShaders;
         fbo_reflection = new Framebuffer();
-        // fbo_default = new Framebuffer();
+        fbo_refraction = new Framebuffer();
         
     }
 
@@ -125,7 +129,7 @@ public:
 
 
         // ############ Input Layout [just like Attributes in OpenGL] ##############
-        D3D11_INPUT_ELEMENT_DESC d3d11InputElementDescriptor[1];
+        D3D11_INPUT_ELEMENT_DESC d3d11InputElementDescriptor[2];
         ZeroMemory((void *)&d3d11InputElementDescriptor, sizeof(D3D11_INPUT_ELEMENT_DESC) * _ARRAYSIZE(d3d11InputElementDescriptor));
         // initialize input layout structure
         d3d11InputElementDescriptor[0].SemanticName = "POSITION";
@@ -135,6 +139,14 @@ public:
         d3d11InputElementDescriptor[0].InputSlot = 0;
         d3d11InputElementDescriptor[0].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
         d3d11InputElementDescriptor[0].InstanceDataStepRate = 0;
+
+        d3d11InputElementDescriptor[1].SemanticName = "TEXCOORD";
+        d3d11InputElementDescriptor[1].SemanticIndex = 0;
+        d3d11InputElementDescriptor[1].Format = DXGI_FORMAT_R32G32_FLOAT;
+        d3d11InputElementDescriptor[1].AlignedByteOffset = D3D11_APPEND_ALIGNED_ELEMENT;
+        d3d11InputElementDescriptor[1].InputSlot = 1;
+        d3d11InputElementDescriptor[1].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
+        d3d11InputElementDescriptor[1].InstanceDataStepRate = 0;
 
         // create input layout
         hr = m_Device->CreateInputLayout(d3d11InputElementDescriptor,
@@ -170,6 +182,25 @@ public:
                 -1.0f, 1.0f,
                 1.0f, 1.0f
             };
+
+        const float squareTexcoords[] =
+            {
+                // Tex : u,v
+
+                +0.0f,
+                +0.0f,
+                +0.0f,
+                +1.0f,
+                +1.0f,
+                +0.0f,
+
+                +1.0f,
+                +0.0f,
+                +0.0f,
+                +1.0f,
+                +1.0f,
+                +1.0f,
+            };
         
         // create vertex buffer for above position vertices
         //  A. initialize Buffer Descriptor... like glGenBuffer()
@@ -192,6 +223,28 @@ public:
         {
             fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
             fprintf(gpFile, "gpID3D11Device::CreateBuffer() Failed for Position ...\n");
+            fclose(gpFile);
+            return FALSE;
+        }
+
+        // Texture
+        ZeroMemory((void *)&d3d11BufferDescriptor, sizeof(D3D11_BUFFER_DESC));
+        d3d11BufferDescriptor.Usage = D3D11_USAGE_DEFAULT;
+        d3d11BufferDescriptor.ByteWidth = sizeof(float) * _ARRAYSIZE(squareTexcoords);
+        d3d11BufferDescriptor.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+
+        // B. initialize subresource data structure to put data into the buffer
+        ZeroMemory((void *)&d3d11SubresourceData, sizeof(D3D11_SUBRESOURCE_DATA));
+        d3d11SubresourceData.pSysMem = squareTexcoords;
+
+        // C. Create the actual buffer
+        hr = pID3D11Device->CreateBuffer(&d3d11BufferDescriptor,
+                                         &d3d11SubresourceData,
+                                         &gpID3D11Buffer_TextureBuffer_WaterQuad);
+        if (FAILED(hr))
+        {
+            fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
+            fprintf(gpFile, "gpID3D11Device::CreateBuffer() Failed for Texture ...\n");
             fclose(gpFile);
             return FALSE;
         }
@@ -224,13 +277,18 @@ public:
         D3D11_SAMPLER_DESC d3d11SamplerDescriptor;
         ZeroMemory((void *)&d3d11SamplerDescriptor, sizeof(D3D11_SAMPLER_DESC));
         d3d11SamplerDescriptor.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+        // d3d11SamplerDescriptor.Filter = D3D11_FILTER_MINIMUM_MIN_MAG_MIP_LINEAR;
         d3d11SamplerDescriptor.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
         d3d11SamplerDescriptor.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
         d3d11SamplerDescriptor.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
-        d3d11SamplerDescriptor.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
+        d3d11SamplerDescriptor.ComparisonFunc = D3D11_COMPARISON_NEVER;
+        d3d11SamplerDescriptor.BorderColor[0] = 1.0f;
+        d3d11SamplerDescriptor.BorderColor[1] = 1.0f;
+        d3d11SamplerDescriptor.BorderColor[2] = 1.0f;
+        d3d11SamplerDescriptor.BorderColor[3] = 1.0f;
         d3d11SamplerDescriptor.MinLOD = 0;
         d3d11SamplerDescriptor.MaxLOD = D3D11_FLOAT32_MAX;
-        d3d11SamplerDescriptor.MaxAnisotropy = 16;
+        d3d11SamplerDescriptor.MaxAnisotropy = 1;
 
         hr = m_Device->CreateSamplerState(&d3d11SamplerDescriptor, &gpID3D11SamplerState_Texture_PS);
         if (FAILED(hr))
@@ -244,6 +302,17 @@ public:
 
         // reflection
         hr = fbo_reflection->CreateFramebuffer(m_Device, &RTTexture_Reflection, &RTVReflection, &rtSRVReflection, &rtTextureDepth_Reflection, &rtDSVDepth_Reflection, TRUE);
+        // bool isReflection = fbo_reflection->InitializeReflectionFBO(m_Device, m_DeviceContext, 1024, 1024, RTTexture_Reflection, RTVReflection, rtDSVDepth_Reflection);
+        // if (!isReflection)
+        if (FAILED(hr))
+        {
+            fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
+            fprintf(gpFile, "CreateFramebuffer() Failed ...\n");
+            fclose(gpFile);
+        }
+
+        // refraction
+        hr = fbo_refraction->CreateFramebuffer(m_Device, &RTTexture_Refraction, &RTVRefraction, &rtSRVRefraction, &rtTextureDepth_Refraction, &rtDSVDepth_Refraction, TRUE);
         if (FAILED(hr))
         {
             fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
@@ -252,7 +321,7 @@ public:
         }
 
         // Above Water
-        object = new WaterQuad(pIDXGISwapChain, pID3D11Device, pID3D11DeviceContext, pID3D11RenderTargetView);//, myLog);
+        object = new WaterQuad(pIDXGISwapChain, m_Device, m_DeviceContext, pID3D11RenderTargetView);//, myLog);
         if (!object->Initialize())
         {
             fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
@@ -276,6 +345,19 @@ public:
             fclose(gpFile);
         }
            
+        // for debugging
+        // m_SwapChain(SwapChain),
+        //   m_Device(Device),
+        //   m_DeviceContext(DeviceContext),
+        //   m_RenderTargetView(RenderTargetView),
+        //   m_DepthStencilView(DepthStencilView)
+        texQuad = new TexturedQuad(pIDXGISwapChain, m_Device, m_DeviceContext, pID3D11RenderTargetView);
+        if (texQuad->Initialize() == FALSE)
+        {
+            fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
+            fprintf(gpFile, "Debug Quad failed to Initialize()...\n");
+            fclose(gpFile);
+        }
 
         // Blending
         D3D11_BLEND_DESC blendDesc;
@@ -450,44 +532,133 @@ public:
         return TRUE;
     }
 
-    bool initializeReflectionFBO(int, int)
+    bool InitializeReflectionFBO(ID3D11Device *device, ID3D11DeviceContext *context, int reflectionTextureWidth, int reflectionTextureHeight, 
+                                ID3D11Texture2D *reflectionTexture, ID3D11RenderTargetView *reflectionRTV, ID3D11DepthStencilView *reflectionDSV)
     {
+        HRESULT hr;
+
+        // Step 1: Check the maximum texture size supported (similar to checking max renderbuffer size)
+        D3D11_FEATURE_DATA_D3D10_X_HARDWARE_OPTIONS hwOptions;
+        hr = device->CheckFeatureSupport(D3D11_FEATURE_D3D10_X_HARDWARE_OPTIONS, &hwOptions, sizeof(hwOptions));
+
+        if (FAILED(hr))
+        {
+            std::cout << "Failed to check feature support\n";
+            return false;
+        }
+
+        if (reflectionTextureWidth > D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION || reflectionTextureHeight > D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION)
+        {
+            std::cout << "Requested texture size exceeds the hardware limits\n";
+            return false;
+        }
+
+        // Step 2: Create the texture for rendering (similar to glTexImage2D)
+        D3D11_TEXTURE2D_DESC texDesc = {};
+        texDesc.Width = reflectionTextureWidth;
+        texDesc.Height = reflectionTextureHeight;
+        texDesc.MipLevels = 1;
+        texDesc.ArraySize = 1;
+        texDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; // Equivalent to GL_RGB
+        texDesc.SampleDesc.Count = 1;                // No MSAA
+        texDesc.Usage = D3D11_USAGE_DEFAULT;
+        texDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+
+        hr = device->CreateTexture2D(&texDesc, nullptr, &reflectionTexture);
+        if (FAILED(hr))
+        {
+            std::cout << "Failed to create the reflection texture\n";
+            return false;
+        }
+
+        // Step 3: Create a render target view (equivalent to glFramebufferTexture2D)
+        D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
+        rtvDesc.Format = texDesc.Format;
+        rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+
+        hr = device->CreateRenderTargetView(reflectionTexture, &rtvDesc, &reflectionRTV);
+        if (FAILED(hr))
+        {
+            std::cout << "Failed to create the render target view\n";
+            return false;
+        }
+
+        // Step 4: Create the depth-stencil buffer (equivalent to glRenderbufferStorage)
+        D3D11_TEXTURE2D_DESC depthDesc = {};
+        depthDesc.Width = reflectionTextureWidth;
+        depthDesc.Height = reflectionTextureHeight;
+        depthDesc.MipLevels = 1;
+        depthDesc.ArraySize = 1;
+        depthDesc.Format = DXGI_FORMAT_D16_UNORM; // Equivalent to GL_DEPTH_COMPONENT16
+        depthDesc.SampleDesc.Count = 1;
+        depthDesc.Usage = D3D11_USAGE_DEFAULT;
+        depthDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+
+        ID3D11Texture2D *depthStencilBuffer;
+        hr = device->CreateTexture2D(&depthDesc, nullptr, &depthStencilBuffer);
+        if (FAILED(hr))
+        {
+            std::cout << "Failed to create the depth-stencil buffer\n";
+            return false;
+        }
+
+        // Create the depth-stencil view (equivalent to glFramebufferRenderbuffer)
+        D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
+        dsvDesc.Format = depthDesc.Format;
+        dsvDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+
+        hr = device->CreateDepthStencilView(depthStencilBuffer, &dsvDesc, &reflectionDSV);
+        if (FAILED(hr))
+        {
+            std::cout << "Failed to create the depth-stencil view\n";
+            return false;
+        }
+
+        // The framebuffer is ready to be used
+        return true;
     }
 
     bool initializeRefractionFBO(int, int)
     {
     }
 
-    void RenderFrame(XMMATRIX viewMat, ID3D11RenderTargetView *pRTV, ID3D11DepthStencilView *pDSV)
+    void RenderFrame(Camera camera, ID3D11RenderTargetView *pRTV, ID3D11DepthStencilView *pDSV)
     {
         // Reflection
-        Reflection();
+        Reflection(camera);
+        // Refraction(camera);
 
         // water
-        fbo_reflection->BindFBO(pRTV, pDSV, g_width, g_height);
-        
-        clearColor[0] = 0.f;
+        clearColor[0] = 0.2f;
         clearColor[1] = 0.2f;
-        clearColor[2] = 0.4f;
+        clearColor[2] = 0.2f;
         clearColor[3] = 1.0f;
         m_DeviceContext->ClearRenderTargetView(pRTV, clearColor);
         m_DeviceContext->ClearDepthStencilView(pDSV, D3D11_CLEAR_DEPTH , 1.0f, 0); // 2nd and 3rd para are analogus to glCrearDepth
 
         PerspectiveProjectionMatrix = XMMatrixPerspectiveFovLH(XMConvertToRadians(45.0f), (float)g_width / (float)g_height, 0.01f, 1000.0f);
 
-        object->RenderObject(cameraPosition, cameraCenter, cameraUp);
         
-        // float blendFactor[4] = { 0.f, 0.f, 0.f, 0.f }; // Not used in this context
+        // float blendFactor[4] = { 0.f, 0.f, 0.f, 0.5f }; // Not used in this context
         // UINT sampleMask = 0xffffffff; // Sample mask- all samples are updated
         // m_DeviceContext->OMSetBlendState(pBlendStateEnable, blendFactor, sampleMask);
-        
-        RenderWaterQuad(viewMat);
+        // Reflection(camera);
+        // Refraction(camera);
+        fbo_reflection->BindFBO(pRTV, pDSV, g_width, g_height);
 
+        // RenderWaterQuad(viewMat);
+        RenderWaterQuad(camera);
+        // m_DeviceContext->OMSetBlendState(nullptr, nullptr, 0xffffffff);
+        // object->RenderObject(cameraPosition, cameraCenter, cameraUp, false);
+        object->RenderObject(camera, false);
 
-
+        // texQuad->RenderObject(camera, rtSRVReflection);
+        // texQuad->RenderObject(camera, rtSRVRefraction);
+        // texQuad->RenderObject(camera, gpID3D11ShaderResourceView_DUDVMap);
+        // texQuad->RenderObject(camera, gpID3D11ShaderResourceView_NormalMap);
     }
 
-    void RenderWaterQuad(XMMATRIX viewMat)
+    void RenderWaterQuad(Camera camera)
     {
         // code
         m_DeviceContext->IASetInputLayout(gpID3D11InputLayout_WaterQuad);
@@ -496,10 +667,14 @@ public:
         UINT stride = sizeof(float) * 2;
         UINT offset = 0;
         m_DeviceContext->IASetVertexBuffers(0, 1, &gpID3D11Buffer_PositionBuffer_WaterQuad, &stride, &offset);
+
+        // stride = sizeof(float) * 2;
+        // offset = 0;
+        // m_DeviceContext->IASetVertexBuffers(0, 1, &gpID3D11Buffer_TextureBuffer_WaterQuad, &stride, &offset);
         
         // 2. Render
         // Set primitive topology in Input Assembly Stage
-        m_DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+        m_DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
         XMMATRIX translationMatrix = XMMatrixIdentity();
         XMMATRIX worldMatrix = XMMatrixIdentity();
@@ -516,12 +691,14 @@ public:
         // B. Put them into ConstantBuffer
         CBUFFER_WATER constBuffer;
         ZeroMemory((void *)&constBuffer, sizeof(CBUFFER_WATER));
-        constBuffer.WorldMatrix = worldMatrix;
-        constBuffer.ViewMatrix = viewMatrix;
-        constBuffer.ProjectionMatrix = PerspectiveProjectionMatrix;
+        constBuffer.WorldMatrix = (worldMatrix);
+        // constBuffer.ViewMatrix = (viewMatrix);
+        constBuffer.ViewMatrix = (camera.getViewMatrix());
+        constBuffer.ProjectionMatrix = (PerspectiveProjectionMatrix);
 
         // constBuffer.cameraPosition = cameraPosition;
-        constBuffer.cameraPosition = XMVectorSet(cameraPosition.x, cameraPosition.y, cameraPosition.z, 1.0f);
+        // constBuffer.cameraPosition = XMVectorSet(cameraPosition.x, cameraPosition.y, cameraPosition.z, 1.0f);
+        constBuffer.cameraPosition = camera.getEye();
         constBuffer.lightPosition = XMVectorSet(lightPosition.x, lightPosition.y, lightPosition.z, 1.0f);
         // constBuffer.lightPosition = lightPosition;
         constBuffer.moveFactorOffset = moveFactor + WATER_WAVE_SPEED/4;
@@ -532,14 +709,13 @@ public:
         m_DeviceContext->UpdateSubresource(gpID3D11Buffer_ConstantBuffer_WaterQuad, 0, NULL, &constBuffer, 0, 0);
 
         m_DeviceContext->VSSetShader(gpID3D11VertexShader_WaterQuad, 0, 0);
-        m_DeviceContext->VSSetConstantBuffers(0, 1, &gpID3D11Buffer_ConstantBuffer_WaterQuad);
-        
         m_DeviceContext->PSSetShader(gpID3D11PixelShader_WaterQuad, 0, 0);
+        m_DeviceContext->VSSetConstantBuffers(0, 1, &gpID3D11Buffer_ConstantBuffer_WaterQuad);
         m_DeviceContext->PSSetConstantBuffers(0, 1, &gpID3D11Buffer_ConstantBuffer_WaterQuad);
 
         // // set Shader View in Pixel Shader
         m_DeviceContext->PSSetShaderResources(0, 1, &rtSRVReflection);
-        // m_DeviceContext->PSSetShaderResources(1, 1, &rtSRVReflection);
+        m_DeviceContext->PSSetShaderResources(1, 1, &rtSRVRefraction);
         m_DeviceContext->PSSetShaderResources(2, 1, &gpID3D11ShaderResourceView_DUDVMap);
         m_DeviceContext->PSSetShaderResources(3, 1, &gpID3D11ShaderResourceView_NormalMap);
 
@@ -552,7 +728,7 @@ public:
        
     }
 
-    void Reflection()
+    void Reflection(Camera camera)
     {
         float clearColor[4];
         
@@ -560,16 +736,46 @@ public:
         // reflection
         // fbo_reflection->BindFBO(RTVReflection, rtDSVDepth_Reflection);
         // fbo_reflection->BindFBO(RTVReflection, NULL, 800, 600);
+        // fbo_reflection->BindFBO(RTVReflection, nullptr, 512, 512);
         fbo_reflection->BindFBO(RTVReflection, rtDSVDepth_Reflection, 800, 600);
         
-        clearColor[0] = 0.2f;
-        clearColor[1] = 0.2f;
-        clearColor[2] = 0.2f;
-        clearColor[3] = 1.0f;
+        clearColor[0] = 0.0f;
+        clearColor[1] = 0.3f;
+        clearColor[2] = 0.5f;
+        clearColor[3] = 0.0f;
         m_DeviceContext->ClearRenderTargetView(RTVReflection, clearColor);
-        m_DeviceContext->ClearDepthStencilView(rtDSVDepth_Reflection, D3D11_CLEAR_DEPTH , 1.0f, 0); // 2nd and 3rd para are analogus to glCrearDepth
+        // m_DeviceContext->ClearDepthStencilView(rtDSVDepth_Reflection, D3D11_CLEAR_DEPTH , 1.0f, 0); // 2nd and 3rd para are analogus to glClearDepth
 
-        object->RenderObject(cameraPosition, cameraCenter, cameraUp);
+        // PerspectiveProjectionMatrix = XMMatrixPerspectiveFovLH(XMConvertToRadians(45.0f), (float)1024 / (float)1024, 0.01f, 1000.0f);
+
+        // object->RenderObject(cameraPosition, cameraCenter, cameraUp, true);
+        object->RenderObject(camera, true);
+
+        fbo_reflection->UnbindFBO();
+    }
+
+    void Refraction(Camera camera)
+    {
+        float clearColor[4];
+        
+        // code 
+        // reflection
+        // fbo_reflection->BindFBO(RTVReflection, rtDSVDepth_Reflection);
+        // fbo_reflection->BindFBO(RTVRefraction, NULL, 800, 600);
+        fbo_refraction->BindFBO(RTVRefraction, rtDSVDepth_Refraction, 800, 600);
+        // fbo_refraction->BindFBO(RTVRefraction, nullptr, 512, 512);
+        
+        clearColor[0] = 0.0f;
+        clearColor[1] = 0.1f;
+        clearColor[2] = 0.3f;
+        clearColor[3] = 0.0f;
+        m_DeviceContext->ClearRenderTargetView(RTVRefraction, clearColor);
+        m_DeviceContext->ClearDepthStencilView(rtDSVDepth_Refraction, D3D11_CLEAR_DEPTH , 1.0f, 0); // 2nd and 3rd para are analogus to glCrearDepth
+
+        // object->RenderObject(cameraPosition, cameraCenter, cameraUp, false);
+        object->RenderObject(camera, false);
+
+        fbo_refraction->UnbindFBO();
     }
 
 private:
@@ -581,8 +787,6 @@ private:
         XMMATRIX WorldMatrix;
         XMMATRIX ViewMatrix;
         XMMATRIX ProjectionMatrix;
-        // XMMATRIX wvpMatrix;
-
         XMVECTOR cameraPosition;
         XMVECTOR lightPosition;
         XMVECTOR lightColor;
@@ -610,6 +814,13 @@ private:
     ID3D11ShaderResourceView *rtSRVReflection = NULL;
     ID3D11Texture2D *rtTextureDepth_Reflection = NULL;
     ID3D11DepthStencilView *rtDSVDepth_Reflection = NULL;
+
+    // refraction
+    ID3D11Texture2D *RTTexture_Refraction = NULL;
+    ID3D11RenderTargetView *RTVRefraction = NULL;
+    ID3D11ShaderResourceView *rtSRVRefraction = NULL;
+    ID3D11Texture2D *rtTextureDepth_Refraction = NULL;
+    ID3D11DepthStencilView *rtDSVDepth_Refraction = NULL;
 
     ID3D11BlendState *pBlendStateEnable = NULL;
 

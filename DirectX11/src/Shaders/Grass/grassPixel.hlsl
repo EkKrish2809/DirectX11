@@ -4,7 +4,7 @@ SamplerState grassTexture;
 struct vertex
 {
     float4 position:SV_POSITION;
-    // float2 texcoord:TEXCOORD;
+    float2 texcoord:TEXCOORD;
 };
 
 struct geometry_output
@@ -25,5 +25,5 @@ float4 main(vertex input, geometry_output input_g):SV_TARGET
 
     color.xyz = lerp(color.xyz, 0.5 * color.xyz, input_g.colorVariation);
 
-    return color + float4(1.0, 0.0, 0.0, 0.0);
+    return color;// + float4(1.0, 0.0, 0.0, 0.0);
 }

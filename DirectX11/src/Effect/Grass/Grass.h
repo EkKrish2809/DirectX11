@@ -5,12 +5,15 @@
 #include <D3D11.h>
 #include <d3dcompiler.h>
 
+#include <vector>
+
 #pragma warning(disable : 4838)
 #include "XNAMath_204/xnamath.h"
 
-#include "../../DXShaders.h"
+#include "../../Common/DXShaders.h"
 #include "../../Common/DDSTextureLoader.h"
 #include "../../Common/Camera.h"
+#include "../Model/TextureLoader.h"
 
 
 extern XMMATRIX PerspectiveProjectionMatrix;
@@ -35,13 +38,13 @@ public:
 
     struct CBUFFER
     {
+        float ElapsedTime;
+        float WindStrength;
         XMMATRIX WorldMatrix;
         XMMATRIX ViewMatrix;
         XMMATRIX ProjectionMatrix;
 
         XMVECTOR CameraPosition;
-        float ElapsedTime;
-        float WindStrength;
     };
     // CBUFFER constBuffer;
     Camera camera;
@@ -57,7 +60,20 @@ public:
     ID3D11SamplerState *gpID3D11SamplerState_Texture_PS = NULL;
     ID3D11SamplerState *gpID3D11SamplerState_Texture_GS = NULL;
 
-    Grass() {}
+    Grass(IDXGISwapChain *SwapChain,
+          ID3D11Device *Device,
+          ID3D11DeviceContext *DeviceContext,
+          ID3D11RenderTargetView *RenderTargetView,
+          ID3D11DepthStencilView *DepthStencilView) 
+          : m_SwapChain(SwapChain),
+          m_Device(Device),
+          m_DeviceContext(DeviceContext),
+          m_RenderTargetView(RenderTargetView),
+          m_DepthStencilView(DepthStencilView) 
+    {
+        shader = new DXShaders;
+    }
+
     ~Grass()
     {
         if (gpID3D11SamplerState_Texture_GS)
@@ -126,8 +142,8 @@ public:
         HRESULT hr = S_OK;
         // vertex shader
         ID3DBlob *pID3DBlob_VertexShaderCode = NULL;
-        shader = new DXShaders;
-        if (shader->CreateAndCompileVertexShaderObjects("./Shaders/Grass/grassVert.hlsl", VERTEX_SHADER, &gpID3D11VertexShader, &pID3DBlob_VertexShaderCode) == FALSE)
+        
+        if (shader->CreateAndCompileVertexShaderObjects("./src/Shaders/Grass/grassVert.hlsl", VERTEX_SHADER, &gpID3D11VertexShader, &pID3DBlob_VertexShaderCode) == FALSE)
         {
             fopen_s(&gpFile, gszLogFilePathName, "a+");
             fprintf(gpFile, "shader->CreateAndCompileShaderObjects() Failed for Vertex Shader...\n");
@@ -135,14 +151,14 @@ public:
             return FALSE;
         }
         // Set this vertex shader in VErtex Shader Stage of Pipeline
-        pID3D11DeviceContext->VSSetShader(gpID3D11VertexShader,
-                                          NULL,
-                                          0);
+        // m_DeviceContext->VSSetShader(gpID3D11VertexShader,
+        //                                   NULL,
+        //                                   0);
 
         // Geometry Shader
         ID3DBlob *pID3DBlob_GeometryShaderCode = NULL; // Blob is similar to 'void*' (for habdeling Big Sized data)
                                                        // ID3DBlob *pID3DBlob_Error = NULL;
-        if (shader->CreateAndCompileGeometryShaderObjects("./Shaders/Grass/grassGeom.hlsl", GEOMETRY_SHADER, &gpID3D11GeometryShader, &pID3DBlob_GeometryShaderCode) == FALSE)
+        if (shader->CreateAndCompileGeometryShaderObjects("./src/Shaders/Grass/grassGeom.hlsl", GEOMETRY_SHADER, &gpID3D11GeometryShader, &pID3DBlob_GeometryShaderCode) == FALSE)
         {
             fopen_s(&gpFile, gszLogFilePathName, "a+");
             fprintf(gpFile, "shader->CreateAndCompileGeometryShaderObjects() Failed for Geometry Shader...\n");
@@ -150,12 +166,12 @@ public:
             return FALSE;
         }
         //  Set this Geometry shader in Geometry Shader Stage of Pipeline
-        pID3D11DeviceContext->GSSetShader(gpID3D11GeometryShader,
-                                          NULL, // as we haven't used clss linkage if shared shader variables are used
-                                          0);
+        // m_DeviceContext->GSSetShader(gpID3D11GeometryShader,
+        //                                   NULL, // as we haven't used clss linkage if shared shader variables are used
+        //                                   0);
 
         ID3DBlob *pID3DBlob_PixelShaderCode = NULL;
-        if (shader->CreateAndCompilePixelShaderObjects("./Shaders/Grass/grassPixel.hlsl", PIXEL_SHADER, &gpID3D11PixelShader, &pID3DBlob_PixelShaderCode) == FALSE)
+        if (shader->CreateAndCompilePixelShaderObjects("./src/Shaders/Grass/grassPixel.hlsl", PIXEL_SHADER, &gpID3D11PixelShader, &pID3DBlob_PixelShaderCode) == FALSE)
         {
             fopen_s(&gpFile, gszLogFilePathName, "a+");
             fprintf(gpFile, "shader->CreateAndCompilePixelShaderObjects() Failed for Pixel Shader...\n");
@@ -163,12 +179,12 @@ public:
             return FALSE;
         }
         // Set pixel shader in the Pixel Shader stage of Pipeline
-        pID3D11DeviceContext->PSSetShader(gpID3D11PixelShader,
-                                          NULL,
-                                          0);
+        // m_DeviceContext->PSSetShader(gpID3D11PixelShader,
+        //                                   NULL,
+        //                                   0);
 
         // ############ Input Layout [just like Attributes in OpenGL] ##############
-        D3D11_INPUT_ELEMENT_DESC d3d11InputElementDescriptor[2];
+        D3D11_INPUT_ELEMENT_DESC d3d11InputElementDescriptor[1];
         ZeroMemory((void *)&d3d11InputElementDescriptor, sizeof(D3D11_INPUT_ELEMENT_DESC) * _ARRAYSIZE(d3d11InputElementDescriptor));
         // initialize input layout structure
         d3d11InputElementDescriptor[0].SemanticName = "POSITION";
@@ -179,16 +195,16 @@ public:
         d3d11InputElementDescriptor[0].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
         d3d11InputElementDescriptor[0].InstanceDataStepRate = 0;
 
-        d3d11InputElementDescriptor[1].SemanticName = "TEXCOORD";
-        d3d11InputElementDescriptor[1].SemanticIndex = 0;
-        d3d11InputElementDescriptor[1].Format = DXGI_FORMAT_R32G32_FLOAT;
-        d3d11InputElementDescriptor[1].AlignedByteOffset = D3D11_APPEND_ALIGNED_ELEMENT;
-        d3d11InputElementDescriptor[1].InputSlot = 1;
-        d3d11InputElementDescriptor[1].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
-        d3d11InputElementDescriptor[1].InstanceDataStepRate = 0;
+        // d3d11InputElementDescriptor[1].SemanticName = "TEXCOORD";
+        // d3d11InputElementDescriptor[1].SemanticIndex = 0;
+        // d3d11InputElementDescriptor[1].Format = DXGI_FORMAT_R32G32_FLOAT;
+        // d3d11InputElementDescriptor[1].AlignedByteOffset = D3D11_APPEND_ALIGNED_ELEMENT;
+        // d3d11InputElementDescriptor[1].InputSlot = 1;
+        // d3d11InputElementDescriptor[1].InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
+        // d3d11InputElementDescriptor[1].InstanceDataStepRate = 0;
 
         // create input layout
-        hr = pID3D11Device->CreateInputLayout(d3d11InputElementDescriptor,
+        hr = m_Device->CreateInputLayout(d3d11InputElementDescriptor,
                                               _ARRAYSIZE(d3d11InputElementDescriptor),
                                               pID3DBlob_VertexShaderCode->GetBufferPointer(),
                                               pID3DBlob_VertexShaderCode->GetBufferSize(),
@@ -196,20 +212,20 @@ public:
         if (FAILED(hr))
         {
             fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-            fprintf(gpFile, "gpID3D11Device->CreateInputLayout() Failed ...\n");
+            fprintf(gpFile, "gm_Device->CreateInputLayout() Failed ...\n");
             fclose(gpFile);
             return FALSE;
         }
         else
         {
             fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-            fprintf(gpFile, "gpID3D11Device->CreateInputLayout() Successfull ...\n");
+            fprintf(gpFile, "gm_Device->CreateInputLayout() Successfull ...\n");
             fclose(gpFile);
             // return TRUE;
         }
 
         // Set this Input Layout in Input Assembly Stages of Pipeline
-        pID3D11DeviceContext->IASetInputLayout(gpID3D11InputLayout);
+        m_DeviceContext->IASetInputLayout(gpID3D11InputLayout);
 
         // Release the Blob
         pID3DBlob_VertexShaderCode->Release();
@@ -219,27 +235,29 @@ public:
         pID3DBlob_PixelShaderCode = NULL;
 
         // ############ Geometry ##############
+        // Grass Position
+        srand(time(NULL));
+
+        for (float x = -25.0f; x < 25.0f; x = x + 0.1f) // 1000
+        {       
+            for (float z = -25.0f; z < 25.0f; z = z + 0.1f) // 1002
+            {
+                int randomNumberX = rand() % 10 + 1;
+                int randomNumberZ = rand() % 10 + 1;
+
+                grassPosition.push_back(XMFLOAT3(x + (float)randomNumberX / 25.0f, 0, z + (float)randomNumberZ / 25.0f));
+            }
+        }
+
         const float squareVertices[] =
             {
-                -1.0f,
-                +1.0f,
-                -1.0f,
-                +1.0f,
-                +1.0f,
-                -1.0f,
-                -1.0f,
-                -1.0f,
-                -1.0f,
+                -1.0f, +1.0f, -1.0f,
+                +1.0f, +1.0f, -1.0f,
+                -1.0f, -1.0f, -1.0f,
 
-                -1.0f,
-                -1.0f,
-                -1.0f,
-                +1.0f,
-                +1.0f,
-                -1.0f,
-                +1.0f,
-                -1.0f,
-                -1.0f,
+                -1.0f, -1.0f, -1.0f,
+                +1.0f, +1.0f, -1.0f,
+                +1.0f, -1.0f, -1.0f,
             };
 
         const float squareTexcoords[] =
@@ -266,22 +284,22 @@ public:
         D3D11_BUFFER_DESC d3d11BufferDescriptor;
         ZeroMemory((void *)&d3d11BufferDescriptor, sizeof(D3D11_BUFFER_DESC));
         d3d11BufferDescriptor.Usage = D3D11_USAGE_DEFAULT;
-        d3d11BufferDescriptor.ByteWidth = sizeof(float) * _ARRAYSIZE(grassPosition);
+        // d3d11BufferDescriptor.ByteWidth = sizeof(float) * _ARRAYSIZE(squareVertices);
+        d3d11BufferDescriptor.ByteWidth = sizeof(XMFLOAT3) * grassPosition.size();
         d3d11BufferDescriptor.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 
         // B. initialize subresource data structure to put data into the buffer
         D3D11_SUBRESOURCE_DATA d3d11SubresourceData;
         ZeroMemory((void *)&d3d11SubresourceData, sizeof(D3D11_SUBRESOURCE_DATA));
-        d3d11SubresourceData.pSysMem = grassPosition;
+        // d3d11SubresourceData.pSysMem = squareVertices;
+        d3d11SubresourceData.pSysMem = grassPosition.data();
 
         // C. Create the actual buffer
-        hr = pID3D11Device->CreateBuffer(&d3d11BufferDescriptor,
-                                         &d3d11SubresourceData,
-                                         &gpID3D11Buffer_PositionBuffer);
+        hr = m_Device->CreateBuffer(&d3d11BufferDescriptor, &d3d11SubresourceData, &gpID3D11Buffer_PositionBuffer);
         if (FAILED(hr))
         {
             fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-            fprintf(gpFile, "gpID3D11Device::CreateBuffer() Failed for Position ...\n");
+            fprintf(gpFile, "gm_Device::CreateBuffer() Failed for Position ...\n");
             fclose(gpFile);
             // return (hr);
             return FALSE;
@@ -289,39 +307,39 @@ public:
         else
         {
             fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-            fprintf(gpFile, "gpID3D11Device::CreateBuffer()) Succedded for Position ...\n");
+            fprintf(gpFile, "gm_Device::CreateBuffer()) Succedded for Position ...\n");
             fclose(gpFile);
             // return TRUE;
         }
 
-        // Texture
-            // A. initialize Buffer Descriptor... like glGenBuffer()
-            ZeroMemory((void *)&d3d11BufferDescriptor, sizeof(D3D11_BUFFER_DESC));
-            d3d11BufferDescriptor.Usage = D3D11_USAGE_DEFAULT;
-            d3d11BufferDescriptor.ByteWidth = sizeof(float) * _ARRAYSIZE(squareTexcoords);
-            d3d11BufferDescriptor.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        // // Texture
+        // // A. initialize Buffer Descriptor... like glGenBuffer()
+        // ZeroMemory((void *)&d3d11BufferDescriptor, sizeof(D3D11_BUFFER_DESC));
+        // d3d11BufferDescriptor.Usage = D3D11_USAGE_DEFAULT;
+        // d3d11BufferDescriptor.ByteWidth = sizeof(float) * _ARRAYSIZE(squareTexcoords);
+        // d3d11BufferDescriptor.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 
-            // B. initialize subresource data structure to put data into the buffer
-            ZeroMemory((void *)&d3d11SubresourceData, sizeof(D3D11_SUBRESOURCE_DATA));
-            d3d11SubresourceData.pSysMem = squareTexcoords;
+        // // B. initialize subresource data structure to put data into the buffer
+        // ZeroMemory((void *)&d3d11SubresourceData, sizeof(D3D11_SUBRESOURCE_DATA));
+        // d3d11SubresourceData.pSysMem = squareTexcoords;
 
-            // C. Create the actual buffer
-            hr = pID3D11Device->CreateBuffer(&d3d11BufferDescriptor,
-                                            &d3d11SubresourceData,
-                                            &gpID3D11Buffer_TextureBuffer);
-            if (FAILED(hr))
-            {
-                fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-                fprintf(gpFile, "gpID3D11Device::CreateBuffer() Failed for Position ...\n");
-                fclose(gpFile);
-                return(hr);
-            }
-            else
-            {
-                fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-                fprintf(gpFile, "gpID3D11Device::CreateBuffer()) Succedded for Position ...\n");
-                fclose(gpFile);
-            }
+        // // C. Create the actual buffer
+        // hr = m_Device->CreateBuffer(&d3d11BufferDescriptor,
+        //                                 &d3d11SubresourceData,
+        //                                 &gpID3D11Buffer_TextureBuffer);
+        // if (FAILED(hr))
+        // {
+        //     fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
+        //     fprintf(gpFile, "gm_Device::CreateBuffer() Failed for Position ...\n");
+        //     fclose(gpFile);
+        //     return(hr);
+        // }
+        // else
+        // {
+        //     fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
+        //     fprintf(gpFile, "gm_Device::CreateBuffer()) Succedded for Position ...\n");
+        //     fclose(gpFile);
+        // }
         
 
         // Constant Buffer (for uniforms)
@@ -332,13 +350,13 @@ public:
         d3d11BufferDescriptor.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 
         // B. Create Actual Buffer
-        hr = pID3D11Device->CreateBuffer(&d3d11BufferDescriptor,
+        hr = m_Device->CreateBuffer(&d3d11BufferDescriptor,
                                          NULL,
                                          &gpID3D11Buffer_ConstantBuffer);
         if (FAILED(hr))
         {
             fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-            fprintf(gpFile, "gpID3D11Device::CreateBuffer() Failed for Constants ...\n");
+            fprintf(gpFile, "gm_Device::CreateBuffer() Failed for Constants ...\n");
             fclose(gpFile);
             // return (hr);
             return FALSE;
@@ -346,54 +364,34 @@ public:
         else
         {
             fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-            fprintf(gpFile, "gpID3D11Device::CreateBuffer()) Succedded for Constants ...\n");
+            fprintf(gpFile, "gm_Device::CreateBuffer()) Succedded for Constants ...\n");
             fclose(gpFile);
             // return TRUE;
         }
 
         // C. set Constant Buffer into the Vertex shader state of pipeline
-        pID3D11DeviceContext->VSSetConstantBuffers(0,
-                                                   1,
-                                                   &gpID3D11Buffer_ConstantBuffer);
+        m_DeviceContext->VSSetConstantBuffers(0, 1, &gpID3D11Buffer_ConstantBuffer);
 
         // Geometry shader Const Buffer
-        pID3D11DeviceContext->GSSetConstantBuffers(0, // index of buffer
+        m_DeviceContext->GSSetConstantBuffers(0, // index of buffer
                                                    1, // how many buffers
                                                    &gpID3D11Buffer_ConstantBuffer);
 
         // Load Grass texture
-        hr = LoadD3D_DDSTexture(MAKEINTRESOURCE(GRASS1_DDS_TEXTURE), pID3D11Device, &gpID3D11ShaderResourceView_Texture_PS);
+        hr = CreateWICTextureFromFile(m_Device, m_DeviceContext, L"assets/Textures/grass/grass_2.png", nullptr, &gpID3D11ShaderResourceView_Texture_PS);
         if (FAILED(hr))
         {
             fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-            fprintf(gpFile, "LoadD3D_DDSTexture() User Defined function Failed for Grass 1 ...\n");
+            fprintf(gpFile, "Texture couldn't be loaded : DUDVMap ...\n");
             fclose(gpFile);
-            // return (hr);
-            return FALSE;
-        }
-        else
-        {
-            fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-            fprintf(gpFile, "LoadD3D_DDSTexture() User Defined function Successfull for Grass 1 ...\n");
-            fclose(gpFile);
-            // return TRUE;
         }
 
-        hr = LoadD3D_DDSTexture(MAKEINTRESOURCE(FLOWMAP_DDS_TEXTURE), pID3D11Device, &gpID3D11ShaderResourceView_Texture_GS);
+        hr = CreateWICTextureFromFile(m_Device, m_DeviceContext, L"assets/Textures/grass/flowmap.png", nullptr, &gpID3D11ShaderResourceView_Texture_GS);
         if (FAILED(hr))
         {
             fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-            fprintf(gpFile, "LoadD3D_DDSTexture() User Defined function Failed for Flowmap ...\n");
+            fprintf(gpFile, "Texture couldn't be loaded : DUDVMap ...\n");
             fclose(gpFile);
-            // return (hr);
-            return FALSE;
-        }
-        else
-        {
-            fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-            fprintf(gpFile, "LoadD3D_DDSTexture() User Defined function Successfull for Grass 1 ...\n");
-            fclose(gpFile);
-            // return TRUE;
         }
 
         // Create Texture Sampler State
@@ -404,114 +402,99 @@ public:
         d3d11SamplerDescriptor.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
         d3d11SamplerDescriptor.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
 
-        hr = pID3D11Device->CreateSamplerState(&d3d11SamplerDescriptor, &gpID3D11SamplerState_Texture_PS);
+        hr = m_Device->CreateSamplerState(&d3d11SamplerDescriptor, &gpID3D11SamplerState_Texture_PS);
         if (FAILED(hr))
         {
             fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-            fprintf(gpFile, "gpID3D11Device->CreateSamplerState() Failed for Pixel Shader ...\n");
+            fprintf(gpFile, "gm_Device->CreateSamplerState() Failed for Pixel Shader ...\n");
             fclose(gpFile);
             // return (hr);
             return FALSE;
-        }
-        else
-        {
-            fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-            fprintf(gpFile, "gpID3D11Device->CreateSamplerState() Successfull for Pixel Shader ...\n");
-            fclose(gpFile);
         }
 
-        hr = pID3D11Device->CreateSamplerState(&d3d11SamplerDescriptor, &gpID3D11SamplerState_Texture_GS);
+        hr = m_Device->CreateSamplerState(&d3d11SamplerDescriptor, &gpID3D11SamplerState_Texture_GS);
         if (FAILED(hr))
         {
             fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-            fprintf(gpFile, "gpID3D11Device->CreateSamplerState() Failed for Geometry shader...\n");
+            fprintf(gpFile, "gm_Device->CreateSamplerState() Failed for Geometry shader...\n");
             fclose(gpFile);
             // return (hr);
             return FALSE;
-        }
-        else
-        {
-            fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-            fprintf(gpFile, "gpID3D11Device->CreateSamplerState() Successfull for Geometry shader ...\n");
-            fclose(gpFile);
         }
 
         return TRUE;
     }
 
-    void RenderFrame(float time)
+    void RenderFrame(Camera camera, float time)
     {
         // code
         
         // set Position Buffer into InputAssembly stage of pipeline (glVertexAttribPointer() che last 2 para)
         UINT stride = sizeof(float) * 3;
         UINT offset = 0;
-        pID3D11DeviceContext->IASetVertexBuffers(0,
-                                                 1,
-                                                 &gpID3D11Buffer_PositionBuffer,
-                                                 &stride,
-                                                 &offset);
+        m_DeviceContext->IASetVertexBuffers(0, 1, &gpID3D11Buffer_PositionBuffer, &stride, &offset);
         // Set color buffer into Input Assembly stage of pipeline
-        stride = sizeof(float) * 2;
-        offset = 0;
-        pID3D11DeviceContext->IASetVertexBuffers(1,
-                                                1,
-                                                &gpID3D11Buffer_TextureBuffer,
-                                                &stride,
-                                                &offset);
+        // stride = sizeof(float) * 2;
+        // offset = 0;
+        // m_DeviceContext->IASetVertexBuffers(1, 1,&gpID3D11Buffer_TextureBuffer, &stride, &offset);
 
         
         // 2. Render
         // Set primitive topology in Input Assembly Stage
-        pID3D11DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
+        m_DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
 
         // transformations
         
         // A. initialize matrices
-        XMMATRIX worldMatrix = XMMatrixTranslation(0.0f, 0.0f, 5.0f);
+        XMMATRIX worldMatrix = XMMatrixTranslation(0.0f, 0.0f, 2.0f);
         XMMATRIX viewMatrix = XMMatrixIdentity();
-        XMMATRIX scaleMatrix = XMMatrixScaling(10.0f, 10.0f, 10.0f);
-        
-        // XMMATRIX wvpMatrix = worldMatrix * viewMatrix * PerspectiveProjectionMatrix;
+        // viewMatrix = XMMatrixLookAtLH(XMVectorSet(0.0f, 0.0f, -2.0f, 1.0f), XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f), XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f));
+        viewMatrix = camera.getViewMatrix();
+        XMMATRIX scaleMatrix = XMMatrixScaling(1.0f, 1.0f, 1.0f);
         
         // B. Put them into ConstantBuffer
         CBUFFER constBuffer;
         ZeroMemory((void *)&constBuffer, sizeof(CBUFFER));
-        constBuffer.WorldMatrix = scaleMatrix * worldMatrix;
+        constBuffer.WorldMatrix = /*scaleMatrix */ XMMatrixTranspose(worldMatrix);
         // constBuffer.ViewMatrix = camera.getViewMatrix();
-        constBuffer.ViewMatrix = viewMatrix;
-        constBuffer.ProjectionMatrix = PerspectiveProjectionMatrix;
+        constBuffer.ViewMatrix = XMMatrixTranspose(viewMatrix);
+        constBuffer.ProjectionMatrix = XMMatrixTranspose(PerspectiveProjectionMatrix);
 
         // constant buffer for grass
+        // constBuffer.CameraPosition = camera.getEye();
+        // constBuffer.CameraPosition = XMVectorSet(0.0f, 0.0f, -2.0f, 1.0f);
         constBuffer.CameraPosition = camera.getEye();
-        // constBuffer.CameraPosition = XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
         constBuffer.ElapsedTime = time;
         constBuffer.WindStrength = 0.04f;
 
         
         // C. Push them into the shader (like glUniformMatrix4fv())
-        pID3D11DeviceContext->UpdateSubresource(gpID3D11Buffer_ConstantBuffer,
-                                                0,
-                                                NULL,
-                                                &constBuffer,
-                                                0,
-                                                0);
+        m_DeviceContext->UpdateSubresource(gpID3D11Buffer_ConstantBuffer, 0, NULL, &constBuffer, 0, 0);
 
-        
-        pID3D11DeviceContext->GSSetShaderResources(0, 1, &gpID3D11ShaderResourceView_Texture_GS);
-        pID3D11DeviceContext->GSSetSamplers(0, 1, &gpID3D11SamplerState_Texture_GS);
+        m_DeviceContext->VSSetShader(gpID3D11VertexShader, NULL, 0);
+        m_DeviceContext->GSSetShader(gpID3D11GeometryShader, NULL, 0);
+        m_DeviceContext->PSSetShader(gpID3D11PixelShader, NULL, 0);
+
+        // set Constant Buffer into the Vertex shader state of pipeline
+        m_DeviceContext->VSSetConstantBuffers(0, 1, &gpID3D11Buffer_ConstantBuffer);
+
+        // Geometry shader Const Buffer
+        m_DeviceContext->GSSetConstantBuffers(0, 1, &gpID3D11Buffer_ConstantBuffer);
+
+        m_DeviceContext->GSSetShaderResources(0, 1, &gpID3D11ShaderResourceView_Texture_GS);
+        m_DeviceContext->GSSetSamplers(0, 1, &gpID3D11SamplerState_Texture_GS);
 
         // set Shader View in Pixel Shader
-        pID3D11DeviceContext->PSSetShaderResources(0, 1, &gpID3D11ShaderResourceView_Texture_PS);
-
+        m_DeviceContext->PSSetShaderResources(0, 1, &gpID3D11ShaderResourceView_Texture_PS);
         // Set Sampler State in Pixel Texture (corresponds to 2nd line in Pixel shader)
-        pID3D11DeviceContext->PSSetSamplers(0, 1, &gpID3D11SamplerState_Texture_PS);
+        m_DeviceContext->PSSetSamplers(0, 1, &gpID3D11SamplerState_Texture_PS);
 
         // draw primitive
-        pID3D11DeviceContext->Draw(6, 0);
+        m_DeviceContext->Draw(grassPosition.size(), 0);
     }
 
     // Texture Loading Function
+    /*
     HRESULT LoadD3D_DDSTexture(TCHAR ddsTextureResourceID[], ID3D11Device *pID3D11Device, ID3D11ShaderResourceView **ppID3D11ShaderResourceView)
     {
         // variable declarations
@@ -584,10 +567,14 @@ public:
 
         return (hr);
     }
-
+    */
 private:
-    
+    IDXGISwapChain *m_SwapChain;
+    ID3D11Device *m_Device;
+    ID3D11DeviceContext *m_DeviceContext;
+    ID3D11RenderTargetView *m_RenderTargetView;
+    ID3D11DepthStencilView *m_DepthStencilView;
 
-    float grassPosition[3] = {1.0f, 1.0f, 1.0f};
+    std::vector<XMFLOAT3> grassPosition;// = {1.0f, 1.0f, 1.0f};
     DXShaders *shader = NULL;
 };

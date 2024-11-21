@@ -51,6 +51,7 @@ public:
         position = XMVectorSet(_position[0], _position[1], _position[2], 0.0);
 
         updateCameraVectors();
+        updateReflectionVectors();
     }
 
     XMMATRIX getViewMatrix(void)
@@ -64,6 +65,21 @@ public:
         return tempViewMatrix;
     }
 
+    XMMATRIX getReflectionMatrix(float h)
+    {
+        XMMATRIX tempViewMatrix = XMMatrixIdentity();
+        XMVECTOR center;
+        XMVECTOR position_;
+        position_ = XMVectorSet(XMVectorGetX(position),
+                                -XMVectorGetY(position) + (h * 2.0f),
+                                XMVectorGetZ(position), 1.0f);
+        center = position_ + front;
+
+        tempViewMatrix = XMMatrixLookAtLH(position_, center, up);
+
+        return tempViewMatrix;
+    }
+
     XMVECTOR getEye(void)
     {
         return position;
@@ -71,7 +87,7 @@ public:
 
     XMVECTOR getCenter(void)
     {
-        return (position + front);
+        return (XMVectorAdd(position, front));
     }
 
     XMVECTOR getUp()
@@ -94,6 +110,21 @@ public:
         up = XMVector3Normalize(XMVector3Cross(right, front));
     }
 
+    void updateReflectionVectors(void)
+    {
+
+        XMVECTOR front_ = XMVectorSet(
+            cos(degToRad(yaw)) * cos(degToRad(-pitch)),
+            sin(degToRad(-pitch)),
+            sin(degToRad(yaw)) * cos(degToRad(-pitch)),
+            0.0);
+
+        front = XMVector3Normalize(front_);
+
+        right = XMVector3Normalize(XMVector3Cross(front, worldUp));
+        up = XMVector3Normalize(XMVector3Cross(right, front));
+    }
+
     void updateResolution(float _width, float _height)
     {
         width = _width;
@@ -103,52 +134,60 @@ public:
     void keyboardInputs(WPARAM keyPressed)
     {
         // in
-        float velocity = movementSpeed * 0.1;
+        float velocity = movementSpeed * 0.01;
         if (keyPressed == 'w' || keyPressed == 'W')
         {
-            position = position + (front * velocity);
+            position = XMVectorAdd(position, XMVectorScale(front, velocity));
+            // position = position + (front * velocity);
         }
 
         // left
         if (keyPressed == 'a' || keyPressed == 'A')
         {
-            position = position - (right * velocity);
+            position = XMVectorSubtract(position, XMVectorScale(right, velocity));
+            // position = position - (right * velocity);
         }
 
         // out
         if (keyPressed == 's' || keyPressed == 'S')
         {
-            position = position - (front * velocity);
+            position = XMVectorSubtract(position, XMVectorScale(front, velocity));
+            // position = position - (front * velocity);
         }
 
         // right
         if (keyPressed == 'd' || keyPressed == 'D')
         {
-            position = position + (right * velocity);
+            position = XMVectorAdd(position, XMVectorScale(right, velocity));
+            // position = position + (right * velocity);
         }
 
         // up
         if (keyPressed == 'v' || keyPressed == 'V')
         {
-            position = position + (up * velocity);
+            position = XMVectorAdd(position, XMVectorScale(up, velocity));
+            // position = position + (up * velocity);
         }
 
         // down
         if (keyPressed == ' ')
         {
-            position = position - (up * velocity);
+            position = XMVectorSubtract(position, XMVectorScale(up, velocity));
+            // position = position - (up * velocity);
         }
 
         // if (keyPressed.shiftKey)
         // {
         //     movementSpeed = 6.5;
         // }
+        updateCameraVectors();
     }
 
     void invertPitch(void)
     {
-        pitch = -pitch;
+        // pitch = -pitch;
         updateCameraVectors();
+        updateReflectionVectors();
     }
 
     ///////////////// TO DO IN WINDOWS
@@ -191,6 +230,7 @@ public:
         }
 
         updateCameraVectors();
+        updateReflectionVectors();
     }
 
     // Process mouse scroll

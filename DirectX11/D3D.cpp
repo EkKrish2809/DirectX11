@@ -36,7 +36,10 @@
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 // HRESULT LoadD3D_DDSTexture(TCHAR *ddsTextureResourceID, ID3D11Device *pID3D11Device, ID3D11ShaderResourceView **ppID3D11ShaderResourceView);
 
-// #include "Effect/Grass/Grass.h"
+#define WIN_WIDTH 800
+#define WIN_HEIGHT 600
+
+#include "src/Effect/Grass/Grass.h"
 // #include "src/Effect/Model/ModelMain.h"
 // #include "src/Effect/Model/ModelNew.h"
 // #include "src/Effect/Skinning/SkinningMain.h"
@@ -46,9 +49,11 @@ LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 #include "src/Effect/Water/WaterQuad.h"
 #include "src/Effect/WaterNew/WaterNew.h"
 
-#define WIN_WIDTH 800
-#define WIN_HEIGHT 600
+#include "src/Effect/LensFlare/LensFlare.h"
+#include "src/Effect/ParallexMapping/ParallexMapping.h"
+#include "src/Effect/Reflection/reflection.h"
 
+#include "src/Effect/Shadow/Shadow.h"
 
 // global variable declarations
 HWND ghwnd = NULL;
@@ -79,13 +84,18 @@ XMMATRIX PerspectiveProjectionMatrix;
 
 Camera camera;
 // std::shared_ptr<MyLogger> myLog = nullptr;
-// ModelMain *grass = nullptr;
+Grass *grass = nullptr;
 // ModelNew model;
 // SkinningMain model_s;
 Water *water = nullptr;
 WaterNew* waterNew = NULL;
 WaterQuad *waterQUad = nullptr;
 Effect *effect_noise = nullptr;
+
+LensFlare *lens = nullptr;
+ParallexMapping *pMap = nullptr;
+Reflection *reflection = NULL;
+Shadow *shadow = nullptr;
 // Timer 
 StopWatchInterface *timer = NULL;
 
@@ -259,6 +269,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT iMsg, WPARAM wParam, LPARAM lParam)
         break;
     case WM_CHAR:
         camera.keyboardInputs(wParam);
+        pMap->Keyboard(wParam);
         switch (wParam)
         {
         case 'f':
@@ -350,7 +361,6 @@ void ToggleFullScreen(void)
     }
 }
 
-UINT m4xMsaaQuality;
 
 HRESULT initialize(void)
 {
@@ -418,7 +428,6 @@ HRESULT initialize(void)
         fopen_s(&gpFile, gszLogFilePathName, "a+");
         fprintf(gpFile, "D3D11CreateDeviceAndSwapChain() Failed in initialize()...\n", __FUNCTIONW__);
         fclose(gpFile);
-        // myLog->Logger("D3D11CreateDeviceAndSwapChain() Failed in initialize() :: %ls\n", __FUNCTIONW__);
     }
     else
     {
@@ -426,60 +435,45 @@ HRESULT initialize(void)
         // print the obtained driver types
         if (d3dDriverType == D3D_DRIVER_TYPE_HARDWARE)
         {
-            // myLog->Logger("D3D11 Obtained Hardware Driver :: %ls\n", __FUNCTIONW__);
             fprintf(gpFile, "D3D11 Obtained Hardware Driver...\n");
         }
         else if (d3dDriverType == D3D_DRIVER_TYPE_WARP)
         {
-            // myLog->Logger("D3D11 Obtained WARP Driver :: %ls\n", __FUNCTIONW__);
             fprintf(gpFile, "D3D11 Obtained WARP Driver...\n");
         }
         else if (d3dDriverType == D3D_DRIVER_TYPE_REFERENCE)
         {
-            // myLog->Logger("D3D11 Obtained Referance Driver :: %ls\n", __FUNCTIONW__);
             fprintf(gpFile, "D3D11 Obtained Referance Driver...\n");
         }
         else
         {
-            // myLog->Logger("D3D11 Obtained UNKNOWN Driver :: %ls\n", __FUNCTIONW__);
             fprintf(gpFile, "D3D11 Obtained UNKNOWN Driver...\n");
         }
 
         // print obtained D3D feature level
         if (d3dFeatureLevel_acquired == D3D_FEATURE_LEVEL_11_0)
         {
-            // myLog->Logger("D3D11 Obtained 11.0 Feature Level :: %ls\n", __FUNCTIONW__);
             fprintf(gpFile, "D3D11 Obtained 11.0 Feature Level...\n");
         }
         else if (d3dFeatureLevel_acquired == D3D_FEATURE_LEVEL_10_1)
         {
-            // myLog->Logger("D3D11 Obtained 10.1 Feature Level :: %ls\n", __FUNCTIONW__);
             fprintf(gpFile, "D3D11 Obtained 10.1 Feature Level...\n");
         }
         else if (d3dFeatureLevel_acquired == D3D_FEATURE_LEVEL_10_0)
         {
-            // myLog->Logger("D3D11 Obtained 10.0 Feature Level :: %ls\n", __FUNCTIONW__);
             fprintf(gpFile, "D3D11 Obtained 10.0 Feature Level...\n");
         }
         else
         {
-            // myLog->Logger("D3D11 Obtained UNKNOWN Feature Level :: %ls\n", __FUNCTIONW__);
             fprintf(gpFile, "D3D11 Obtained UNKNOWN Feature Level...\n");
         }
         fclose(gpFile);
     }
 
-
-    
-    
-
-    
     // Initialize clear color array
     clearColor[0] = 0.0f;
     clearColor[1] = 0.2f;
-    // clearColor[1] = 0.0f;
     clearColor[2] = 0.4f;
-    // clearColor[2] = 0.0f;
     clearColor[3] = 1.0f;
 
     // Enabling rasterizer State
@@ -516,61 +510,78 @@ HRESULT initialize(void)
     // C. Set the state into Rasterizer pipeline
     pID3D11DeviceContext->RSSetState(gpID3D11RasterizerState);
 
-    
-    // grass = new ModelMain(pIDXGISwapChain, pID3D11Device, pID3D11DeviceContext, pID3D11RenderTargetView);
-    // if (!grass->Initialize())
-    // {
-    //     fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-    //     fprintf(gpFile, "grass.Initialize() Failed ...\n");
-    //     fclose(gpFile);
-    // }
+
     // initialize Camera
-	float _position[] = {0.0f, 5.0f, -300.0f};
+	float _position[] = {0.0f, 0.0f, 2.0f};
 	camera = Camera(WIN_WIDTH, WIN_HEIGHT, _position);
 
     // setting projection matrix to identity
     PerspectiveProjectionMatrix = XMMatrixIdentity();
 
-    // // call to Grass initialize
-    // model.InitD3D(ghwnd);
-    // model_s = SkinningMain(pIDXGISwapChain, pID3D11Device, pID3D11DeviceContext, pID3D11RenderTargetView);
-    // if (!model_s.Initialize())
-    // {
-    //     fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-    //     fprintf(gpFile, "model_s.Initialize() Failed ...\n");
-    //     fclose(gpFile);
-    // }
+    //-------------------- Initialize Effects --------------------
 
     // Water
-    water = new Water(pIDXGISwapChain, pID3D11Device, pID3D11DeviceContext, pID3D11RenderTargetView, gpID3D11DepthStencilView);
-    if (water->initializeWaterQuad() == FALSE)
+    // water = new Water(pIDXGISwapChain, pID3D11Device, pID3D11DeviceContext, pID3D11RenderTargetView, gpID3D11DepthStencilView);
+    // if (water->initializeWaterQuad() == FALSE)
+    // {
+    //     fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
+    //     fprintf(gpFile, "water.initializeWaterQuad() Failed ...\n");
+    //     fclose(gpFile);
+    // }
+
+    // waterNew = new WaterNew(pIDXGISwapChain, pID3D11Device, pID3D11DeviceContext, pID3D11RenderTargetView, gpID3D11DepthStencilView);
+    // if (waterNew->Initialize() == FALSE)
+    // {
+    //     fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
+    //     fprintf(gpFile, "water.initializeWaterQuad() Failed ...\n");
+    //     fclose(gpFile);
+    // }
+
+    // Grass
+    // grass = new Grass(pIDXGISwapChain, pID3D11Device, pID3D11DeviceContext, pID3D11RenderTargetView, gpID3D11DepthStencilView);
+    // if (grass->Initialize() == FALSE)
+    // {
+    //     fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
+    //     fprintf(gpFile, "grass->Initialize() Failed ...\n");
+    //     fclose(gpFile);
+    // }
+
+    // lens = new LensFlare(pIDXGISwapChain, pID3D11Device, pID3D11DeviceContext, pID3D11RenderTargetView, gpID3D11DepthStencilView);
+    // if (lens->Initialize() == FALSE)
+    // {
+    //     fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
+    //     fprintf(gpFile, "lens->Initialize() Failed ...\n");
+    //     fclose(gpFile);
+    // }
+
+    pMap = new ParallexMapping(pIDXGISwapChain, pID3D11Device, pID3D11DeviceContext, pID3D11RenderTargetView, gpID3D11DepthStencilView);
+    if (pMap->Initialize() == FALSE)
     {
         fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-        fprintf(gpFile, "water.initializeWaterQuad() Failed ...\n");
+        fprintf(gpFile, "pMap->Initialize() Failed ...\n");
         fclose(gpFile);
     }
-    // water->initializeWaterBedQuad();
 
-    // waterNew = new WaterNew(pIDXGISwapChain, pID3D11Device, pID3D11DeviceContext, pID3D11RenderTargetView);//, myLog);
-    
-
-    // waterQUad = new WaterQuad(pIDXGISwapChain, pID3D11Device, pID3D11DeviceContext, pID3D11RenderTargetView);//, myLog);
-    // if (!waterQUad->Initialize())
+    // reflection = new Reflection(pID3D11Device, pID3D11DeviceContext);
+    // if (reflection->Initialize() == FALSE)
     // {
     //     fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-    //     fprintf(gpFile, "waterQUad.Initialize() Failed ...\n");
+    //     fprintf(gpFile, "reflection->Initialize() Failed ...\n");
     //     fclose(gpFile);
     // }
-
-    // // Noise
-    // effect_noise = new SunSurface(pIDXGISwapChain, pID3D11Device, pID3D11DeviceContext, pID3D11RenderTargetView);
-    // if (!effect_noise->Initialize())
+fopen_s(&gpFile, gszLogFilePathName, "a+");
+fprintf(gpFile, "Before Shadow...\n");
+fclose(gpFile);
+    // shadow = new Shadow(pIDXGISwapChain, pID3D11Device, pID3D11DeviceContext, pID3D11RenderTargetView);
+    // if (shadow->Initialize() == FALSE)
     // {
     //     fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-    //     fprintf(gpFile, "effect_noise->Initialize() Failed ...\n");
+    //     fprintf(gpFile, "shadow->Initialize() Failed ...\n");
     //     fclose(gpFile);
     // }
-
+fopen_s(&gpFile, gszLogFilePathName, "a+");
+fprintf(gpFile, "After Shadow...\n");
+fclose(gpFile);
     // Timer initialization
     sdkCreateTimer(&timer);
     sdkStartTimer(&timer);
@@ -582,7 +593,6 @@ HRESULT initialize(void)
 		fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
 		fprintf(gpFile, "ininitialize()::resize() Failed ...\n");
 		fclose(gpFile);
-        // myLog->Logger("ininitialize()::resize() Failed :: %ls\n", __FUNCTIONW__);
 		return (hr);
 	}
 	else
@@ -590,7 +600,6 @@ HRESULT initialize(void)
 		fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
 		fprintf(gpFile, "ininitialize()::resize() Successfull ...\n");
 		fclose(gpFile);
-        // myLog->Logger("ininitialize()::resize() Successfull :: %ls\n", __FUNCTIONW__);
 	}
 
     fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
@@ -620,7 +629,6 @@ HRESULT PrintD3DInfo(void)
 		fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
 		fprintf(gpFile, "CreateDXGIFactory() Failed...\n");
 		fclose(gpFile);
-        // myLog->Logger("CreateDXGIFactory() Failed :: %ls\n", __FUNCTIONW__);
 		return (hr);
 	}
 	else
@@ -628,7 +636,6 @@ HRESULT PrintD3DInfo(void)
 		fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
 		fprintf(gpFile, "CreateDXGIFactory() Succeded...\n");
 		fclose(gpFile);
-        // myLog->Logger("CreateDXGIFactory() Succeded :: %ls\n", __FUNCTIONW__);
 	}
 
     // 2. get DXGI Adapter
@@ -643,14 +650,12 @@ HRESULT PrintD3DInfo(void)
         fprintf(gpFile, "Graphics Card Name = %s\n", str);
         fprintf(gpFile, "Graphics Card Memory = %dGB\n", (int)ceil(DXGIAdapterDescriptor.DedicatedVideoMemory / 1024.0 / 1024.0 / 1024.0));
         fclose(gpFile);
-        // myLog->Logger("Graphics Card Name = %s\nGraphics Card Memory = %dGB :: %ls\n", str, (int)ceil(DXGIAdapterDescriptor.DedicatedVideoMemory / 1024.0 / 1024.0 / 1024.0), __FUNCTIONW__);
     }
     else
     {
         fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
 		fprintf(gpFile, "IDXGIFactory::EnumAdapters() Failed...\n");
 		fclose(gpFile);
-        // myLog->Logger("IDXGIFactory::EnumAdapters() Failed :: %ls\n", __FUNCTIONW__);
     }
 
     if (pIDXGIAdapter)
@@ -677,7 +682,6 @@ HRESULT resize(int width, int height)
     if (height == 0)
         height = 1;
 
-    // grass.camera.updateResolution(width, height);
 
     // 1. Release existing Render Target View [RTV]
     if (pID3D11RenderTargetView)
@@ -706,7 +710,6 @@ HRESULT resize(int width, int height)
 		fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
 		fprintf(gpFile, "resize() Failed ...\n");
 		fclose(gpFile);
-        // myLog->Logger("resize() Failed :: %ls\n", __FUNCTIONW__);
 		return (hr);
 	}
     // Release DUMMY texture
@@ -736,7 +739,6 @@ HRESULT resize(int width, int height)
 		fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
 		fprintf(gpFile, "pID3D11Device::CreateTexture2D() Failed ...\n");
 		fclose(gpFile);
-        // myLog->Logger("pID3D11Device::CreateTexture2D() Failed :: %ls\n", __FUNCTIONW__);
 		return(hr);
 	}
 
@@ -753,7 +755,6 @@ HRESULT resize(int width, int height)
 		fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
 		fprintf(gpFile, "pID3D11Device::CreateDepthStencilView() Failed ...\n");
 		fclose(gpFile);
-        // myLog->Logger("pID3D11Device::CreateDepthStencilView() Failed :: %ls\n", __FUNCTIONW__);
 		pID3D11Texture2D_DepthBuffer->Release();
 		pID3D11Texture2D_DepthBuffer = NULL;
 		return(hr);
@@ -778,17 +779,19 @@ HRESULT resize(int width, int height)
     // 7. Tell device context to Set this Viewport in the pipeline
     pID3D11DeviceContext->RSSetViewports(1, &d3d11Viewport);
 
-    // 8/ Set Projection Matrix
+    // 8. Set Projection Matrix
     PerspectiveProjectionMatrix = XMMatrixPerspectiveFovLH(XMConvertToRadians(45.0f), (float)width/(float)height, 0.01f, 1000.0f);
-    // PerspectiveProjectionMatrix = XMMatrixPerspectiveFovLH(0.785398163f, (float)width/(float)height, 0.01f, 100.0f);
-    // for (int i=0; i < 16 ; i++)
-    // {
-    //     fopen_s(&gpFile, gszLogFilePathName, "a+"); // opening file in append mode
-    //     fprintf(gpFile, "PerspectiveProjectionMatrix[%d] = %lf\n", i, PerspectiveProjectionMatrix._11);
-    //     fclose(gpFile);
-    // }
+   
     g_width = width;
     g_height = height;
+
+    // for reflection
+    // reflection->SetRTV(pID3D11RenderTargetView);
+    // reflection->SetDSV(gpID3D11DepthStencilView);
+    // reflection->SetViewport(d3d11Viewport);
+    // shadow->SetRTV(pID3D11RenderTargetView);
+    // shadow->SetDSV(gpID3D11DepthStencilView);
+    // shadow->SetViewport(d3d11Viewport);
 
     return (hr);
 }
@@ -802,19 +805,21 @@ void display(void)
     pID3D11DeviceContext->ClearRenderTargetView(pID3D11RenderTargetView, clearColor);
     pID3D11DeviceContext->ClearDepthStencilView(gpID3D11DepthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0); // 2nd and 3rd para are analogus to glCrearDepth
 
-    // grass->RenderFrame(elapsedTime, camera.getViewMatrix());
-    // model_s.RenderFrame(elapsedTime, camera.getViewMatrix());
-    water->RenderFrame(camera.getViewMatrix(), pID3D11RenderTargetView, gpID3D11DepthStencilView);
-    // waterQUad->m_ProjectionMatrix = PerspectiveProjectionMatrix;
-    // waterQUad->RenderObject();
+    // water->RenderFrame(camera, pID3D11RenderTargetView, gpID3D11DepthStencilView);
     // waterNew->RenderFrame();
-    // effect_noise->RenderFrame(camera.getViewMatrix());
-    // effect_noise->Update();
+    // grass->RenderFrame(camera, elapsedTime);
+    // lens->Render();
+    // pMap->Render(camera);
+   
+    // reflection->RenderReflectionOnTexture(camera, elapsedTime);
+    // reflection->RenderRefractionOnTexture(camera, elapsedTime);
+    // reflection->Render(camera, elapsedTime);
+
+    // shadow
+    shadow->RenderShadow(camera);
 
     // 3. Swap buffers by presenting them
     pIDXGISwapChain->Present(0, 0);
-
-        // model.RenderFrame();
 }
 
 void update(void)
@@ -835,8 +840,6 @@ void uninitialize(void)
         sdkDeleteTimer(&timer);
         timer = NULL;
     }
-
-    
 
     if (pID3D11RenderTargetView)
     {

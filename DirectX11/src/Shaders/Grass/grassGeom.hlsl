@@ -1,22 +1,22 @@
 Texture2D myTexture2D;
 SamplerState mySamplerState;
 
-cbuffer constantBuffer
+cbuffer constantBuffer : register(b0)
 {
+    float u_time;
+    float u_windStrength;
     float4x4 worldMatrix;
     float4x4 ViewMatrix;
     float4x4 ProjectionMatrix;
     float3 u_cameraPosition;
-    float u_time;
-    float u_windStrength;
-}
+};
 
 struct vertex
 {
-    float4 position:POSITION;
+    float4 position:SV_POSITION;
     // float2 texcoord:TEXCOORD;
 };
-static struct vertex input_array[3];
+// static struct vertex input_array[3];
 
 
 struct geometry_output
@@ -25,8 +25,6 @@ struct geometry_output
     float2 texCoord:TEXCOORD;
     float colorVariation:COLOR;
 };
-// TriangleStream<geometry_output> triangleStream_out;
-
 
 float4x4 rotationX(float angle)
 {
@@ -89,7 +87,7 @@ float fbm(float2 st)
 }
 
 // void createQuad(triangle vertex input[3], inout TriangleStream<geometry_output> triangleStream, float3 basePosition, float4x4 crossModel, float grass_size)
-void createQuad(inout TriangleStream<geometry_output> triangleStream, float3 basePosition, float4x4 crossModel, float grass_size)
+void createQuad(inout TriangleStream<geometry_output> triangleStream, triangle vertex input[3], float3 basePosition, float4x4 crossModel, float grass_size)
 {
     geometry_output output;
     float4 vertices[4];
@@ -101,15 +99,15 @@ void createQuad(inout TriangleStream<geometry_output> triangleStream, float3 bas
                                         0.0, 0.0, 0.0, 1.0);
     float PI = 3.141592653589793;
 
-    vertices[0] = float4(-0.25, 0.0, 0.0, 0.0);
-    vertices[1] = float4(0.25, 0.0, 0.0, 0.0);
-    vertices[2] = float4(-0.25, 0.5, 0.0, 0.0);
-    vertices[3] = float4(0.25, 0.5, 0.0, 0.0);
+    vertices[0] = float4(-0.25, 0.0, 0.0, 0.0);	// Bottom Left
+	vertices[1] = float4(0.25, 0.0, 0.0, 0.0);	// Bottom Right
+	vertices[2] = float4(-0.25, 0.5, 0.0, 0.0);	// Top Left
+	vertices[3] = float4(0.25, 0.5, 0.0, 0.0);	// Top Right
 
-    texcoords[0] = float2(0.0, 0.0);
-    texcoords[1] = float2(1.0, 0.0);
-    texcoords[2] = float2(0.0, 1.0);
-    texcoords[3] = float2(1.0, 1.0);
+	texcoords[0] = float2(0.0, 0.0);	// Bottom Left
+	texcoords[1] = float2(1.0, 0.0);	// Bottom Right
+	texcoords[2] = float2(0.0, 1.0);	// Top Left
+	texcoords[3] = float2(1.0, 1.0);	// Top Right
 
     float2 uv = (basePosition.xz / 10.0) + windDirection * u_windStrength * u_time;
     uv.x = fmod(uv.x, 1.0);
@@ -120,29 +118,21 @@ void createQuad(inout TriangleStream<geometry_output> triangleStream, float3 bas
 
     float4x4 modelRandomYRotation = rotationY(random(basePosition.xz) * PI);
 
-    // for (int i = 0; i < 4; i++)
-    for (int i = 0; i < 3; i++)
+    for (int i = 0; i < 4; i++)
     {
         if (i == 2)
             modelWindMatrix = modelWind;
 
-        // float4 pos = mul(worldMatrix, pos);
-        // pos = mul(ViewMatrix, pos);
-        // pos = mul(ProjectionMatrix , pos);
-        
-        // output.position = mul()
-        // output.position = ProjectionMatrix * ViewMatrix * worldMatrix * (input[i].position + modelWindMatrix * modelRandomYRotation * crossModel * (vertices[i] * grassSize));
-        output.position = mul(mul(mul((input_array[i].position + mul(mul(mul(((grass_size * vertices[i])), crossModel), modelRandomYRotation), modelWindMatrix)), worldMatrix), ViewMatrix), ProjectionMatrix);
+        output.position = mul(mul(mul((input[0].position + mul(mul(mul(((grass_size * vertices[i])), crossModel), modelRandomYRotation), modelWindMatrix)), worldMatrix), ViewMatrix), ProjectionMatrix);
         output.texCoord = texcoords[i];
-        output.colorVariation = fbm(input_array[i].position.xz);
+        output.colorVariation = fbm(input[0].position.xz);
         triangleStream.Append(output);
     }
     triangleStream.RestartStrip();
 
 }
 
-// void createGrass(triangle vertex input[3], inout TriangleStream<geometry_output> triangleStream, int numberOfQuads, float grass_size)
-void createGrass(inout TriangleStream<geometry_output> triangleStream, int numberOfQuads, float grass_size)
+void createGrass(inout TriangleStream<geometry_output> triangleStream, triangle vertex input[3], int numberOfQuads, float grass_size)
 {
     float4x4 model0 = float4x4(1.0, 0.0, 0.0, 0.0,
                                 0.0, 1.0, 0.0, 0.0,
@@ -153,44 +143,38 @@ void createGrass(inout TriangleStream<geometry_output> triangleStream, int numbe
 
     if (numberOfQuads == 1)
     {
-        // createQuad(input, triangleStream, input[0].position.xyz, model0, grass_size);
-        createQuad(triangleStream, input_array[0].position.xyz, model0, grass_size);
+        createQuad(triangleStream, input, input[0].position.xyz, model0, grass_size);
     }
     else if (numberOfQuads == 2)
     {
-        // createQuad(input, triangleStream, input[0].position.xyz, model45, grass_size);
-        // createQuad(input, triangleStream, input[0].position.xyz, modelm45, grass_size);
-        createQuad(triangleStream, input_array[0].position.xyz, model45, grass_size);
-        createQuad(triangleStream, input_array[0].position.xyz, modelm45, grass_size);
+        createQuad(triangleStream, input, input[0].position.xyz, model45, grass_size);
+        createQuad(triangleStream, input, input[0].position.xyz, modelm45, grass_size);
     }
-    else if (numberOfQuads == 2)
+    else if (numberOfQuads == 3)
     {
-        // createQuad(input, triangleStream, input[0].position.xyz, model0, grass_size);
-        // createQuad(input, triangleStream, input[0].position.xyz, model45, grass_size);
-        // createQuad(input, triangleStream, input[0].position.xyz, modelm45, grass_size);
-        createQuad(triangleStream, input_array[0].position.xyz, model0, grass_size);
-        createQuad(triangleStream, input_array[0].position.xyz, model45, grass_size);
-        createQuad(triangleStream, input_array[0].position.xyz, modelm45, grass_size);
+        createQuad(triangleStream, input, input[0].position.xyz, model0, grass_size);
+        createQuad(triangleStream, input, input[0].position.xyz, model45, grass_size);
+        createQuad(triangleStream, input, input[0].position.xyz, modelm45, grass_size);
     }
 
 }
 
 
-[maxvertexcount(40)]
+[maxvertexcount(36)]
 
 void main(triangle vertex input[3], inout TriangleStream<geometry_output> triangleStream)
 {
-    geometry_output output;
+    // geometry_output output;
     float c_min_size = 0.4;
-    float LOD1 = 500.0;
-    float LOD2 = 1000.0;
-    float LOD3 = 1500.0;
+    float LOD1 = 5.0;
+    float LOD2 = 10.0;
+    float LOD3 = 20.0;
     float3 cameraDistance = input[0].position.xyz - u_cameraPosition;
     float distanceLength = length(cameraDistance);
     float transitionFactor = 6.0;
     uint details = 3;
     
-    input_array = input;
+    // input_array = input;
     // triangleStream_out = triangleStream;
     float grassSize = random(input[0].position.xz) * (1.0 - c_min_size) + c_min_size;
     if (distanceLength == LOD2)
@@ -201,7 +185,7 @@ void main(triangle vertex input[3], inout TriangleStream<geometry_output> triang
 
     if (distanceLength > LOD1)
     {
-        details = 1;
+        details = 2;
     }
     if (distanceLength > LOD2)
     {
@@ -211,9 +195,10 @@ void main(triangle vertex input[3], inout TriangleStream<geometry_output> triang
     {
         details = 0;
     }
-    if (details != 1 || (details == 1 && (uint(input[0].position.x * 10) % 1) == 0 || (uint(input[0].position.z * 10) % 1) == 0) || (details == 2 && (input[0].position.x * 5) % 1) == 0 || (uint(input[0].position.z * 5) % 1) == 0)
+
+    if (details != 1 || (details == 1 && (uint(input[0].position.x * 10) % 1) == 0 || (uint(input[0].position.z * 10) % 1) == 0)
+     || (details == 2 && (input[0].position.x * 5) % 1) == 0 || (uint(input[0].position.z * 5) % 1) == 0)
     {
-        // createGrass(input, triangleStream, details, grassSize);
-        createGrass(triangleStream, details, grassSize);
+        createGrass(triangleStream, input, details, grassSize);
     }
 }

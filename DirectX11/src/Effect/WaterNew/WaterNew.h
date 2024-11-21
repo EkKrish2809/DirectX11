@@ -69,11 +69,13 @@ class WaterNew
         WaterNew(IDXGISwapChain *SwapChain,
             ID3D11Device *Device,
             ID3D11DeviceContext *DeviceContext,
-            ID3D11RenderTargetView *RenderTargetView
+            ID3D11RenderTargetView *RenderTargetView,
+            ID3D11DepthStencilView *DepthStencilView
             /*std::shared_ptr<MyLogger> _log*/)                             :m_SwapChain(SwapChain),
                                                         m_Device(Device),
                                                         m_DeviceContext(DeviceContext),
-                                                        m_RenderTargetView(RenderTargetView)
+                                                        m_RenderTargetView(RenderTargetView),
+                                                        m_DepthStencilView(DepthStencilView)
                                                         // m_log(_log)
         {
             if (!Initialize())
@@ -569,6 +571,7 @@ class WaterNew
         ID3D11Device *m_Device;
         ID3D11DeviceContext *m_DeviceContext;
         ID3D11RenderTargetView *m_RenderTargetView;
+        ID3D11DepthStencilView *m_DepthStencilView;
         // std::shared_ptr<MyLogger> m_log;
 
         ID3D11VertexShader *gpID3D11VertexShader;

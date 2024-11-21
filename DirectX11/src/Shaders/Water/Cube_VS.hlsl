@@ -1,6 +1,7 @@
 cbuffer constantBuffer_Cube : register(b0)
 {
-    float4x4 worldViewProjectionMatrix;
+    matrix worldViewProjectionMatrix;
+    float3 objectColor;
 }
 struct vertex
 {
